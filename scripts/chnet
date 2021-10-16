@@ -1,0 +1,68 @@
+#!/usr/bin/env ruby
+
+# # original /etc/hosts
+# 127.0.0.1       localhost
+# 127.0.1.1       shun-x1c6
+# ::1     localhost ip6-localhost ip6-loopback
+# ff02::1 ip6-allnodes
+# ff02::2 ip6-allrouters
+
+require 'fileutils'
+
+HOSTS_FILE = '/etc/hosts'
+# HOSTS_FILE = '/home/shun/tmp/hosts'
+
+def tailscale_host_ip(host)
+  status = `tailscale status`
+  m = %r{^(\d+\.\d+\.\d+\.\d+)\s+#{Regexp.escape host}\s}.match(status)
+  m[1] if m
+end
+
+home_dir = '/home/shun'
+hostname = 'd1'
+
+current_ssid = `iwgetid -r`.chomp
+home_ssids = File.readlines("#{home_dir}/HOME_SSIDS").map(&:chomp)
+puts "current ssid: #{current_ssid}"
+puts "home ssids: #{home_ssids.join(", ")}"
+
+case ARGV[0]
+when /\At/
+  at_home = false
+when /\Ah/
+  at_home = true
+else
+  at_home = home_ssids.any? { |ssid| current_ssid == ssid }
+end
+
+if at_home
+  puts "I'm at home."
+  new_ip = '192.168.0.23'
+else
+  puts "I'm not at home."
+  new_ip = tailscale_host_ip(hostname)
+end
+
+new_entry = "#{new_ip}\t#{hostname}"
+
+buf = File.read(HOSTS_FILE)
+found = false
+modified = buf.each_line.map do |line|
+  line.chomp!
+  if line.match?(%r{^\d+\.\d+\.\d+\.\d+\s+#{Regexp.escape hostname}})
+    found = true
+    new_entry
+  else
+    line
+  end
+end
+
+unless found
+  modified.push new_entry
+end
+
+tmp_filename = "#{HOSTS_FILE}.tmp"
+new_etc_hosts = "#{modified.join("\n")}\n"
+puts "\n#{new_etc_hosts}"
+File.write(tmp_filename, new_etc_hosts)
+FileUtils.mv(tmp_filename, HOSTS_FILE)

@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# STACK_ID=xxx
+# APP_ID=xxx
+# AWS_PROFILE=xxx
+
+deployment_id=$(AWS_PROFILE=$AWS_PROFILE aws opsworks create-deployment --stack-id $STACK_ID --app-id $APP_ID --command '{ "Name": "deploy" }' | jq -r '.DeploymentId')
+if [ $? -eq 0 ]; then
+  echo "Deployment started. (DeploymentId = $deployment_id)"
+else
+  echo "Deployment faild"
+  exit 1
+fi
+
+SECONDS=0
+
+echo ""
+deployment_status="running"
+while [ "$deployment_status" = "running" ]
+do
+  sleep 5
+  deployment_status=$(AWS_PROFILE=$AWS_PROFILE aws opsworks describe-deployments --deployment-ids $deployment_id | jq -r '.Deployments | .[0] | .Status')
+  duration=$SECONDS
+  # https://stackoverflow.com/a/51858404
+  echo -e "\r\033[1A\033[0K$(printf "%02d" $(($duration / 60))):$(printf "%02d" $(($duration % 60))) $deployment_status"
+done
+
